@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 1.5cm 1.5cm 1.5cm 1.5cm;
+    }
+
+    body {
+      background-color: white !important;
+      color: black !important;
+      font-size: 11pt !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Hide non-printable elements */
+    header,
+    footer,
+    nav,
+    .print\:hidden {
+      display: none !important;
+    }
+
+    /* Avoid page-breaks inside questions */
+    .print\:break-inside-avoid {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+
+    .print\:break-before-page {
+      break-before: page !important;
+      page-break-before: always !important;
+    }
+
+    .print\:break-after-page {
+      break-after: page !important;
+      page-break-after: always !important;
+    }
+  }
+}
