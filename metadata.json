@@ -2,5 +2,7 @@
   "name": "KISI-SOAL AI SD/MI",
   "description": "Generator Kisi-Kisi & Soal Otomatis Berbasis Indikator untuk SD/MI - Disusun By Witno",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
