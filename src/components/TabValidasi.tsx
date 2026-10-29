@@ -44,7 +44,15 @@ export const TabValidasi: React.FC<TabValidasiProps> = ({
     const hasKisi = Boolean(matchedKisi);
     const levelMatch = matchedKisi ? matchedKisi.level === q.level : true;
     const bentukMatch = matchedKisi ? matchedKisi.bentukSoal === q.bentukSoal : true;
-    const isFullValid = hasKisi && levelMatch && bentukMatch && (q.kesesuaianIndikator === 'Sangat Sesuai' || q.kesesuaianIndikator === 'Sesuai');
+    const hasQuestionMarkInPg = q.bentukSoal === 'Pilihan Ganda' && (q.pertanyaan || '').includes('?');
+    const isFullValid = hasKisi && levelMatch && bentukMatch && !hasQuestionMarkInPg && (q.kesesuaianIndikator === 'Sangat Sesuai' || q.kesesuaianIndikator === 'Sesuai');
+
+    let masalah = null;
+    if (hasQuestionMarkInPg) {
+      masalah = 'Pokok soal pilihan ganda memuat tanda tanya (?) — kaidah resmi asesmen SD/MI mengharuskan diakhiri .... tanpa tanda tanya.';
+    } else if (!isFullValid) {
+      masalah = 'Indikator atau level kognitif tidak sepenuhnya identik dengan kisi-kisi.';
+    }
 
     return {
       no: idx + 1,
@@ -55,15 +63,15 @@ export const TabValidasi: React.FC<TabValidasiProps> = ({
       level: q.level,
       bentuk: q.bentukSoal,
       status: isFullValid ? 'Valid' : 'Perlu Revisi',
-      masalah: isFullValid ? null : 'Indikator atau level kognitif tidak sepenuhnya identik dengan kisi-kisi.',
-      rekomendasi: isFullValid ? 'Siap Digunakan' : 'Regenerate Soal'
+      masalah,
+      rekomendasi: isFullValid ? 'Siap Digunakan' : hasQuestionMarkInPg ? 'Sesuaikan pokok soal PG tanpa tanda tanya' : 'Regenerate Soal'
     };
   });
 
   const totalValid = validationRows.filter((r) => r.status === 'Valid').length;
   const isAllValid = questions.length > 0 && totalValid === questions.length && duplicateAlerts.length === 0;
 
-  // 17-point Kontrol Kualitas Akhir Checklist
+  // 18-point Kontrol Kualitas Akhir Checklist
   const qualityChecklist = [
     { title: 'Jumlah soal sesuai permintaan', pass: questions.length > 0 && questions.length === kisiKisi.length },
     { title: 'Nomor soal lengkap dan berurutan', pass: questions.every((q, i) => q.nomorSoal === i + 1) },
@@ -75,6 +83,7 @@ export const TabValidasi: React.FC<TabValidasiProps> = ({
     { title: 'Soal sesuai materi ajar yang diujikan', pass: true },
     { title: 'Level kognitif sesuai dengan kisi-kisi', pass: validationRows.every((r) => r.status === 'Valid') },
     { title: 'Bentuk soal sesuai dengan kisi-kisi', pass: true },
+    { title: 'Kaidah PG: Pokok soal tanpa tanda tanya (?) & diakhiri (....)', pass: questions.every((q) => q.bentukSoal !== 'Pilihan Ganda' || !q.pertanyaan.includes('?')) },
     { title: 'Bahasa sesuai tingkat perkembangan kelas SD/MI', pass: true },
     { title: 'Kunci jawaban benar dan tunggal untuk PG', pass: questions.every((q) => q.bentukSoal !== 'Pilihan Ganda' || ['A', 'B', 'C', 'D'].includes(q.kunciJawaban)) },
     { title: 'Tidak ada soal ambigu', pass: true },

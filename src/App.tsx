@@ -45,7 +45,8 @@ import { exportAssessmentToWord } from './utils/exportDocx';
 import { 
   generateLocalKisiKisi, 
   generateLocalQuestions, 
-  generateLocalQuestionItem 
+  generateLocalQuestionItem,
+  sanitizePgQuestion
 } from './utils/localGenerator';
 
 type TabKey = 'identitas' | 'kisi' | 'soal' | 'kunci' | 'pembahasan' | 'validasi';
@@ -124,12 +125,37 @@ export default function App() {
     }));
   };
 
-  // Update Questions List
+  // Auto-sanitize loaded project to guarantee Kemdikbud compliance (no question mark in PG)
+  useEffect(() => {
+    setCurrentProject((prev) => {
+      let changed = false;
+      const cleanQuestions = (prev.questions || []).map((q) => {
+        if (q.bentukSoal === 'Pilihan Ganda' && (q.pertanyaan.includes('?') || !q.pertanyaan.trim().endsWith('....'))) {
+          changed = true;
+          return { ...q, pertanyaan: sanitizePgQuestion(q.pertanyaan) };
+        }
+        return q;
+      });
+      return changed ? { ...prev, questions: cleanQuestions } : prev;
+    });
+  }, []);
+
+  // Update Questions List (Guaranteed sanitized for Pilihan Ganda)
   const handleUpdateQuestions = (updated: QuestionItem[]) => {
+    const sanitized = updated.map((q) => {
+      if (q.bentukSoal === 'Pilihan Ganda') {
+        return {
+          ...q,
+          pertanyaan: sanitizePgQuestion(q.pertanyaan),
+        };
+      }
+      return q;
+    });
+
     setCurrentProject((prev) => ({
       ...prev,
       updatedAt: new Date().toISOString(),
-      questions: updated,
+      questions: sanitized,
     }));
   };
 

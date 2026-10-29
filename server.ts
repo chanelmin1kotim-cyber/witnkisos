@@ -70,6 +70,53 @@ async function callGeminiWithTimeout(params: {
 }
 
 /**
+ * Kaidah Baku Penulisan Soal Pilihan Ganda (Kemendikbudristek & Kemenag SD/MI):
+ * Pokok soal (stem) pilihan ganda HARUS berupa kalimat pernyataan belum selesai (incomplete statement)
+ * dan diakhiri dengan 4 titik (....).
+ * Pokok soal pilihan ganda DILARANG KERAS menggunakan tanda tanya (?).
+ */
+function sanitizePgQuestion(text: string): string {
+  if (!text) return '';
+  let str = text.trim();
+
+  // 1. Hapus seluruh tanda tanya (?)
+  str = str.replace(/[?？]+/g, '');
+
+  // 2. Ubah kata tanya di awal kalimat atau klausa menjadi bentuk pernyataan
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapakah\s+/g, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+kilogram\s+/gi, '$1jumlah beras ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+jumlah\s+/gi, '$1jumlah ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+total\s+/gi, '$1total ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+/gi, '$1jumlah ');
+  str = str.replace(/(^|[.?!]\s+)[Aa]pakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Mm]anakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]agaimanakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]agaimana\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Ss]iapakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Ss]iapa\s+/gi, '$1');
+
+  // Bersihkan tanda baca titik/titik dua/spasi di akhir
+  str = str.replace(/[\.\:\s]+$/g, '').trim();
+
+  // Rapikan huruf kapital di awal kalimat jika ada pemenggalan
+  if (str.length > 0) {
+    str = str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  // Jika diakhiri partikel/predikat baku (adalah, yaitu, ialah, sebesar, ke, dsb.)
+  if (/(adalah|yaitu|ialah|sebesar|sebanyak|berjumlah|berbunyi|dinamakan|disebut|ke|pada|dengan|oleh)$/i.test(str)) {
+    return `${str} ....`;
+  }
+
+  // Jika frasa kuantitas seperti "Keliling persegi tersebut"
+  if (/(keliling|luas|panjang|hasil|jumlah|total|nilai|volume|jarak|kecepatan|status|hukum)\s+[^.]+$/i.test(str) && !str.toLowerCase().includes('adalah')) {
+    return `${str} adalah ....`;
+  }
+
+  return `${str} ....`;
+}
+
+/**
  * Subject-Aware Authentic Generator for SD/MI:
  * Creates concrete, age-appropriate questions and options directly matching curriculum subjects.
  * NEVER produces abstract meta-phrases like "Penerapan konsep pokok".
@@ -141,7 +188,7 @@ function generateConcreteQuestionItem(
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
         stimulus: 'Paman membeli 2/7 kg gula pasir di warung, kemudian bibi membeli lagi 3/7 kg gula pasir.',
-        pertanyaan: 'Berapa jumlah seluruh gula pasir yang dibeli paman dan bibi?',
+        pertanyaan: 'Jumlah seluruh gula pasir yang dibeli paman dan bibi adalah ....',
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
         opsi: [
@@ -164,7 +211,7 @@ function generateConcreteQuestionItem(
       nomorSoal: nomor,
       kisiKisiId: kisi.id,
       stimulus: `Perhatikan permasalahan matematika mengenai materi ${kisi.materiAjar} berikut ini:`,
-      pertanyaan: `Sebuah bangun persegi memiliki panjang sisi 6 cm. Berapakah keliling persegi tersebut?`,
+      pertanyaan: `Sebuah bangun persegi memiliki panjang sisi 6 cm. Keliling persegi tersebut adalah ....`,
       bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
       level,
       opsi: [
@@ -213,7 +260,7 @@ function generateConcreteQuestionItem(
           nomorSoal: nomor,
           kisiKisiId: kisi.id,
           stimulus: 'Pak Harun memiliki keluarga yang terdiri dari 4 orang jiwa (ayah, ibu, dan 2 anak).',
-          pertanyaan: 'Jika zakat fitrah per jiwa adalah 2,5 kg beras, berapa kilogram beras yang harus dikeluarkan oleh Pak Harun?',
+          pertanyaan: 'Jika zakat fitrah per jiwa adalah 2,5 kg beras, jumlah beras yang harus dikeluarkan oleh Pak Harun adalah ....',
           bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
           level,
           opsi: [
@@ -554,7 +601,20 @@ TABEL KISI-KISI ACUAN:
 ${JSON.stringify(kisiKisi, null, 2)}
 
 PERHATIAN KHUSUS UNTUK KUALITAS OPSI JAWABAN ANAK SD/MI:
-1. SINKRONISASI MUTLAK:
+1. ATURAN MUTLAK FORMAT SOAL PILIHAN GANDA (STANDAR RESMI KEMDIKBUD/KEMENAG SD/MI):
+   - DILARANG KERAS MENGGUNAKAN TANDA TANYA (?) PADA SOAL PILIHAN GANDA!
+   - Pokok soal (stem) pilihan ganda WAJIB berbentuk KALIMAT PERNYATAAN BELUM SELESAI (incomplete statement) dan diakhiri dengan 4 titik (....).
+   - CONTOH BENAR:
+     * "Pecahan berikut ini yang senilai dengan 2/4 adalah ...."
+     * "Sebuah bangun persegi memiliki sisi 6 cm. Keliling persegi tersebut adalah ...."
+     * "Hukum menunaikan zakat fitrah bagi setiap muslim yang mampu adalah ...."
+     * "Bagian tumbuhan yang bertugas menyerap air dan hara adalah ...."
+   - CONTOH SALAH (DILARANG KERAS!):
+     * "Berapakah keliling persegi tersebut?" -> SALAH!
+     * "Pecahan manakah yang senilai dengan 2/4?" -> SALAH!
+     * "Apakah hukum zakat fitrah?" -> SALAH!
+   - Tanda tanya (?) HANYA boleh digunakan pada soal bentuk Uraian jika diperlukan.
+2. SINKRONISASI MUTLAK:
    - Pertanyaan dan opsi pilihan jawaban (A, B, C, D) HARUS 100% SINGKRON dan konkret!
    - Setiap opsi jawaban (A, B, C, D) harus langsung menjawab pertanyaan yang diajukan.
    - CONTOH NYATA:
@@ -562,21 +622,21 @@ PERHATIAN KHUSUS UNTUK KUALITAS OPSI JAWABAN ANAK SD/MI:
      * Jika pertanyaan menanyakan tanda perbandingan -> Opsi HARUS berupa simbol (contoh: A. <, B. >, C. =, D. +).
      * Jika pertanyaan menanyakan besaran zakat -> Opsi HARUS berupa angka dan satuan (contoh: A. 2,5 kg, B. 5 kg, C. 1 kg, D. 7,5 kg).
      * Jika pertanyaan menanyakan organ tumbuhan -> Opsi HARUS nama organ (contoh: A. Akar, B. Daun, C. Bunga, D. Batang).
-     * Jika pertanyaan menanyakan tanda baca -> Opsi HARUS nama tanda baca (contoh: A. Tanda tanya (?), B. Tanda titik (.), C. Tanda seru (!), D. Tanda koma (,)).
-2. DILARANG KERAS MEMBUAT OPSI ABSTRAK ATAU BAHASA DEWASA seperti:
+     * Jika pertanyaan menanyakan tanda baca -> Opsi HARUS nama tanda baca (contoh: A. Tanda titik (.), B. Tanda seru (!), C. Tanda koma (,), D. Tanda tanya (?)).
+3. DILARANG KERAS MEMBUAT OPSI ABSTRAK ATAU BAHASA DEWASA seperti:
    - "Penerapan konsep pokok..."
    - "Contoh yang kurang relevan..."
    - "Tindakan yang bertentangan..."
    - "Alternatif yang tidak memenuhi..."
    Semua opsi harus berupa kata benda, kata kerja, angka, atau kalimat nyata yang mudah dipahami anak usia SD/MI!
-3. KUNCI JAWABAN:
+4. KUNCI JAWABAN:
    - Kunci jawaban WAJIB benar secara mutlak dan cocok dengan salah satu label opsi (A, B, C, D).
    - Distribusi kunci harus acak dan berimbang (jangan selalu A, jangan monoton).
    - Pengecoh harus masuk akal bagi anak SD/MI.
-4. SOAL URAIAN:
+5. SOAL URAIAN:
    - Pertanyaan jelas, ringkas, mudah dipahami siswa kelas ${kelas}.
    - Sertakan Kunci Jawaban / Pedoman Penskoran dan Rubrik Skor 0 s.d. 4.
-5. PEMBAHASAN:
+6. PEMBAHASAN:
    - Buat pembahasan yang edukatif, memandu alur berpikir anak secara runut.
 
 KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
@@ -585,7 +645,7 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
     "nomorSoal": 1,
     "kisiKisiId": "id-dari-kisi-kisi",
     "stimulus": "Cerita atau ilustrasi singkat ramah anak (jika relevan)",
-    "pertanyaan": "Kalimat pertanyaan yang konkret dan jelas",
+    "pertanyaan": "Kalimat pernyataan belum selesai berakhiran .... (untuk PG, tanpa tanda tanya) atau pertanyaan jelas (untuk Uraian)",
     "bentukSoal": "Pilihan Ganda" | "Uraian",
     "level": "L1" | "L2" | "L3",
     "opsi": [
@@ -605,7 +665,7 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
     },
     "kesesuaianIndikator": "Sangat Sesuai",
     "kesesuaianPersen": 100,
-    "catatanValidasi": "Soal dan opsi jawaban 100% singkron dan logis untuk anak SD/MI."
+    "catatanValidasi": "Soal dan opsi jawaban 100% singkron, sesuai kaidah PG tanpa tanda tanya."
   }
 ]`;
 
@@ -624,23 +684,29 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
         if (Array.isArray(parsed) && parsed.length > 0) {
           const mappedQuestions = parsed.map((q: any, i: number) => {
             const matchedKisi = kisiKisi[i] || kisiKisi.find((k: any) => k.nomorSoal === q.nomorSoal) || kisiKisi[0];
+            const bentuk = matchedKisi ? matchedKisi.bentukSoal : (q.bentukSoal || 'Pilihan Ganda');
+            let cleanPertanyaan = q.pertanyaan || `Pertanyaan nomor ${i + 1}`;
+            if (bentuk === 'Pilihan Ganda') {
+              cleanPertanyaan = sanitizePgQuestion(cleanPertanyaan);
+            }
+
             return {
               id: `q-${Date.now()}-${i + 1}`,
               nomorSoal: matchedKisi ? matchedKisi.nomorSoal : i + 1,
               kisiKisiId: matchedKisi ? matchedKisi.id : `kisi-${i + 1}`,
               stimulus: q.stimulus || '',
-              pertanyaan: q.pertanyaan || `Pertanyaan nomor ${i + 1}`,
-              bentukSoal: matchedKisi ? matchedKisi.bentukSoal : (q.bentukSoal || 'Pilihan Ganda'),
+              pertanyaan: cleanPertanyaan,
+              bentukSoal: bentuk,
               level: matchedKisi ? matchedKisi.level : (q.level || 'L2'),
-              opsi: q.opsi || (matchedKisi?.bentukSoal === 'Pilihan Ganda' ? [
+              opsi: q.opsi || (bentuk === 'Pilihan Ganda' ? [
                 { label: 'A', text: 'Pilihan A' },
                 { label: 'B', text: 'Pilihan B' },
                 { label: 'C', text: 'Pilihan C' },
                 { label: 'D', text: 'Pilihan D' }
               ] : undefined),
-              kunciJawaban: q.kunciJawaban || (matchedKisi?.bentukSoal === 'Pilihan Ganda' ? 'A' : 'Kunci Jawaban'),
+              kunciJawaban: q.kunciJawaban || (bentuk === 'Pilihan Ganda' ? 'A' : 'Kunci Jawaban'),
               pembahasan: q.pembahasan || 'Pembahasan jawaban.',
-              rubrikPenskoran: q.rubrikPenskoran || (matchedKisi?.bentukSoal === 'Uraian' ? {
+              rubrikPenskoran: q.rubrikPenskoran || (bentuk === 'Uraian' ? {
                 skor4: 'Jawaban sangat lengkap dan tepat.',
                 skor3: 'Jawaban benar namun kurang lengkap.',
                 skor2: 'Sebagian jawaban benar.',
@@ -662,7 +728,11 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
 
     // High quality concrete subject-specific fallback generator
     const generatedQuestions = kisiKisi.map((kisi: any, index: number) => {
-      return generateConcreteQuestionItem(kisi, index, jenjang, kelas, mataPelajaran);
+      const item = generateConcreteQuestionItem(kisi, index, jenjang, kelas, mataPelajaran);
+      if (item.bentukSoal === 'Pilihan Ganda') {
+        item.pertanyaan = sanitizePgQuestion(item.pertanyaan);
+      }
+      return item;
     });
 
     return res.json({ success: true, data: generatedQuestions, source: 'built-in-engine' });
@@ -671,7 +741,11 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
     const { kisiKisi = [], identity = {} } = req.body;
     const { jenjang = 'SD', kelas = 4, mataPelajaran = 'Matematika' } = identity;
     const safeQuestions = kisiKisi.map((kisi: any, index: number) => {
-      return generateConcreteQuestionItem(kisi, index, jenjang, kelas, mataPelajaran);
+      const item = generateConcreteQuestionItem(kisi, index, jenjang, kelas, mataPelajaran);
+      if (item.bentukSoal === 'Pilihan Ganda') {
+        item.pertanyaan = sanitizePgQuestion(item.pertanyaan);
+      }
+      return item;
     });
     return res.json({ success: true, data: safeQuestions, source: 'built-in-engine' });
   }
@@ -706,16 +780,19 @@ ATURAN KETAT:
 - Jenjang: ${jenjang} Kelas ${kelas}
 - Mata Pelajaran: ${mataPelajaran}
 
-ATURAN OPSI JAWABAN:
-1. Opsi A, B, C, D HARUS 100% SINGKRON dan menjawab pertanyaan secara konkret.
-2. DILARANG KERAS menggunakan kata-kata teoretis seperti "Penerapan konsep pokok".
-3. Gunakan angka, nama benda, pecahan, atau kalimat nyata yang ramah anak SD/MI.
-4. Kunci jawaban harus benar-benar akurat.
+ATURAN FORMAT SOAL:
+1. KAIDAH PILIHAN GANDA: DILARANG KERAS MENGGUNAKAN TANDA TANYA (?) PADA PILIHAN GANDA!
+   Pokok soal PG WAJIB berupa kalimat pernyataan belum selesai yang diakhiri 4 titik (....).
+   Tanda tanya (?) HANYA boleh untuk soal Uraian jika diperlukan.
+2. Opsi A, B, C, D HARUS 100% SINGKRON dan menjawab pertanyaan secara konkret.
+3. DILARANG KERAS menggunakan kata-kata teoretis seperti "Penerapan konsep pokok".
+4. Gunakan angka, nama benda, pecahan, atau kalimat nyata yang ramah anak SD/MI.
+5. Kunci jawaban harus benar-benar akurat.
 
 Kembalikan format JSON:
 {
   "stimulus": "teks stimulus baru yang menarik bagi anak SD/MI",
-  "pertanyaan": "pertanyaan baru yang jelas dan terarah",
+  "pertanyaan": "pernyataan belum selesai berakhiran .... (untuk PG) atau pertanyaan jelas (untuk Uraian)",
   "opsi": [
     { "label": "A", "text": "opsi konkret A" },
     { "label": "B", "text": "opsi konkret B" },
@@ -740,12 +817,17 @@ Kembalikan format JSON:
         const cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(cleanJson);
 
+        let cleanPertanyaan = parsed.pertanyaan || 'Pertanyaan hasil regenerasi.';
+        if (kisiKisiItem.bentukSoal === 'Pilihan Ganda') {
+          cleanPertanyaan = sanitizePgQuestion(cleanPertanyaan);
+        }
+
         const updated = {
           id: currentQuestion?.id || `q-${Date.now()}`,
           nomorSoal: kisiKisiItem.nomorSoal,
           kisiKisiId: kisiKisiItem.id,
           stimulus: parsed.stimulus || '',
-          pertanyaan: parsed.pertanyaan || 'Pertanyaan hasil regenerasi.',
+          pertanyaan: cleanPertanyaan,
           bentukSoal: kisiKisiItem.bentukSoal,
           level: kisiKisiItem.level,
           opsi: parsed.opsi,
@@ -754,7 +836,7 @@ Kembalikan format JSON:
           rubrikPenskoran: parsed.rubrikPenskoran,
           kesesuaianIndikator: 'Sangat Sesuai',
           kesesuaianPersen: 100,
-          catatanValidasi: 'Opsi jawaban telah disempurnakan dan logis untuk anak SD/MI.'
+          catatanValidasi: 'Opsi jawaban telah disempurnakan dan sesuai kaidah PG tanpa tanda tanya.'
         };
 
         return res.json({ success: true, data: updated });
@@ -765,6 +847,9 @@ Kembalikan format JSON:
 
     // Concrete fallback
     const concrete = generateConcreteQuestionItem(kisiKisiItem, kisiKisiItem.nomorSoal - 1, jenjang, kelas, mataPelajaran);
+    if (concrete.bentukSoal === 'Pilihan Ganda') {
+      concrete.pertanyaan = sanitizePgQuestion(concrete.pertanyaan);
+    }
     return res.json({ success: true, data: concrete });
   } catch (error: any) {
     console.error('Error regenerating question:', error);
@@ -784,13 +869,24 @@ app.post('/api/validate-assessment', async (req, res) => {
       const isMatch = Boolean(kisi);
       const levelMatch = kisi ? kisi.level === q.level : true;
       const bentukMatch = kisi ? kisi.bentukSoal === q.bentukSoal : true;
+      const isPg = q.bentukSoal === 'Pilihan Ganda';
+      const hasQuestionMarkInPg = isPg && (q.pertanyaan || '').includes('?');
 
       // Check if options are generic/abstract
       const hasAbstractOptions = q.opsi?.some((op: any) =>
         /penerapan konsep|tindakan yang bertentangan|alternatif yang tidak memenuhi|contoh yang kurang relevan/i.test(op.text || '')
       );
 
-      const passed = isMatch && levelMatch && bentukMatch && !hasAbstractOptions;
+      const passed = isMatch && levelMatch && bentukMatch && !hasAbstractOptions && !hasQuestionMarkInPg;
+
+      let masalahText = null;
+      if (hasAbstractOptions) {
+        masalahText = 'Opsi pilihan ganda belum konkret/ramah anak SD/MI';
+      } else if (hasQuestionMarkInPg) {
+        masalahText = 'Pokok soal pilihan ganda menggunakan tanda tanya (?) — kaidah resmi asesmen mengharuskan kalimat pernyataan yang diakhiri titik-titik (....)';
+      } else if (!passed) {
+        masalahText = 'Ketidaksesuaian level atau bentuk soal dengan kisi-kisi';
+      }
 
       return {
         nomorSoal: q.nomorSoal,
@@ -799,8 +895,8 @@ app.post('/api/validate-assessment', async (req, res) => {
         level: q.level,
         bentuk: q.bentukSoal,
         status: passed ? 'Valid' : 'Perlu Revisi',
-        masalah: hasAbstractOptions ? 'Opsi pilihan ganda belum konkret/ramah anak SD/MI' : passed ? null : 'Ketidaksesuaian level atau bentuk soal dengan kisi-kisi',
-        rekomendasi: passed ? 'Siap digunakan' : 'Regenerate soal agar opsi konkret'
+        masalah: masalahText,
+        rekomendasi: passed ? 'Siap digunakan' : hasQuestionMarkInPg ? 'Ubah pokok soal menjadi kalimat pernyataan berakhiran ....' : 'Regenerate soal agar opsi konkret'
       };
     });
 

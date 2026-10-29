@@ -99,7 +99,7 @@ export const SAMPLE_BANK_SOAL: AssessmentProject[] = [
         nomorSoal: 2,
         kisiKisiId: 'kisi-2',
         stimulus: 'Keluarga Pak Ahmad terdiri dari ayah, ibu, dan 2 orang anak. Pak Ahmad hendak menunaikan zakat fitrah untuk seluruh anggota keluarganya berupa beras.',
-        pertanyaan: 'Jika ketentuan zakat fitrah adalah 2,5 kg beras per jiwa, berapa kilogram beras yang harus dikeluarkan oleh Pak Ahmad?',
+        pertanyaan: 'Jika ketentuan zakat fitrah adalah 2,5 kg beras per jiwa, jumlah beras yang harus dikeluarkan oleh Pak Ahmad adalah ....',
         bentukSoal: 'Pilihan Ganda',
         level: 'L2',
         opsi: [
@@ -139,7 +139,7 @@ export const SAMPLE_BANK_SOAL: AssessmentProject[] = [
         nomorSoal: 4,
         kisiKisiId: 'kisi-4',
         stimulus: 'Karena kesibukan mudik, Pak Ridwan baru sempat menyerahkan beras zakat fitrah kepada pengurus musala pada sore hari tanggal 1 Syawal setelah salat Idul Fitri selesai.',
-        pertanyaan: 'Bagaimana status pembayaran zakat fitrah yang dilakukan oleh Pak Ridwan?',
+        pertanyaan: 'Berdasarkan ketentuan syariat, status pembayaran zakat fitrah yang dilakukan oleh Pak Ridwan adalah ....',
         bentukSoal: 'Pilihan Ganda',
         level: 'L3',
         opsi: [

@@ -12,6 +12,53 @@ const OPERATIONAL_VERBS = {
   L3: ['menganalisis', 'membandingkan', 'menyimpulkan', 'mengevaluasi', 'memecahkan masalah']
 };
 
+/**
+ * Kaidah Baku Penulisan Soal Pilihan Ganda (Kemendikbudristek & Kemenag SD/MI):
+ * Pokok soal (stem) pilihan ganda HARUS berupa kalimat pernyataan belum selesai (incomplete statement)
+ * dan diakhiri dengan 4 titik (....).
+ * Pokok soal pilihan ganda DILARANG KERAS menggunakan tanda tanya (?).
+ */
+export function sanitizePgQuestion(text: string): string {
+  if (!text) return '';
+  let str = text.trim();
+
+  // 1. Hapus seluruh tanda tanya (?)
+  str = str.replace(/[?？]+/g, '');
+
+  // 2. Ubah kata tanya di awal kalimat atau klausa menjadi bentuk pernyataan
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapakah\s+/g, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+kilogram\s+/gi, '$1jumlah beras ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+jumlah\s+/gi, '$1jumlah ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+total\s+/gi, '$1total ');
+  str = str.replace(/(^|[.?!]\s+)[Bb]erapa\s+/gi, '$1jumlah ');
+  str = str.replace(/(^|[.?!]\s+)[Aa]pakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Mm]anakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]agaimanakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Bb]agaimana\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Ss]iapakah\s+/gi, '$1');
+  str = str.replace(/(^|[.?!]\s+)[Ss]iapa\s+/gi, '$1');
+
+  // Bersihkan tanda baca titik/titik dua/spasi di akhir
+  str = str.replace(/[\.\:\s]+$/g, '').trim();
+
+  // Rapikan huruf kapital di awal kalimat jika ada pemenggalan
+  if (str.length > 0) {
+    str = str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  // Jika diakhiri partikel/predikat baku (adalah, yaitu, ialah, sebesar, ke, dsb.)
+  if (/(adalah|yaitu|ialah|sebesar|sebanyak|berjumlah|berbunyi|dinamakan|disebut|ke|pada|dengan|oleh)$/i.test(str)) {
+    return `${str} ....`;
+  }
+
+  // Jika frasa kuantitas seperti "Keliling persegi tersebut"
+  if (/(keliling|luas|panjang|hasil|jumlah|total|nilai|volume|jarak|kecepatan|status|hukum)\s+[^.]+$/i.test(str) && !str.toLowerCase().includes('adalah')) {
+    return `${str} adalah ....`;
+  }
+
+  return `${str} ....`;
+}
+
 export function generateLocalKisiKisi(
   params: {
     totalSoal: number;
@@ -135,7 +182,7 @@ export function generateLocalQuestionItem(
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
         stimulus: 'Ibu membeli 2/5 kg tepung terigu di toko. Karena masih kurang, ibu membeli lagi 1/5 kg tepung terigu.',
-        pertanyaan: 'Berapa jumlah total tepung terigu yang dibeli oleh ibu?',
+        pertanyaan: 'Jumlah total tepung terigu yang dibeli oleh ibu adalah ....',
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
         opsi: isPg ? [
@@ -158,7 +205,7 @@ export function generateLocalQuestionItem(
       nomorSoal: nomor,
       kisiKisiId: kisi.id,
       stimulus: `Sebuah bangun persegi memiliki panjang sisi 7 cm.`,
-      pertanyaan: `Berapakah keliling bangun persegi tersebut?`,
+      pertanyaan: `Keliling bangun persegi tersebut adalah ....`,
       bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
       level,
       opsi: isPg ? [
@@ -207,7 +254,7 @@ export function generateLocalQuestionItem(
           nomorSoal: nomor,
           kisiKisiId: kisi.id,
           stimulus: 'Keluarga Pak Budi terdiri dari 4 orang anggota keluarga (ayah, ibu, dan 2 anak). Pak Budi hendak mengeluarkan zakat fitrah berupa beras.',
-          pertanyaan: 'Jika ketentuan zakat fitrah per jiwa adalah 2,5 kg beras, berapa kilogram total beras yang harus dikeluarkan Pak Budi?',
+          pertanyaan: 'Jika ketentuan zakat fitrah per jiwa adalah 2,5 kg beras, jumlah total beras yang harus dikeluarkan Pak Budi adalah ....',
           bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
           level,
           opsi: isPg ? [
@@ -230,7 +277,7 @@ export function generateLocalQuestionItem(
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
         stimulus: 'Pak Danu baru sempat menyerahkan beras zakat fitrah kepada pengurus musala pada sore hari tanggal 1 Syawal setelah salat Idul Fitri selesai.',
-        pertanyaan: 'Bagaimanakah status pengeluaran beras yang dilakukan oleh Pak Danu tersebut?',
+        pertanyaan: 'Berdasarkan ketentuan syariat, status pengeluaran beras yang dilakukan oleh Pak Danu tersebut adalah ....',
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
         opsi: isPg ? [
@@ -311,5 +358,11 @@ export function generateLocalQuestions(
   kisiKisi: KisiKisiItem[],
   identity: SchoolIdentity
 ): QuestionItem[] {
-  return kisiKisi.map((kisi, idx) => generateLocalQuestionItem(kisi, idx, identity));
+  return kisiKisi.map((kisi, idx) => {
+    const item = generateLocalQuestionItem(kisi, idx, identity);
+    if (item.bentukSoal === 'Pilihan Ganda') {
+      item.pertanyaan = sanitizePgQuestion(item.pertanyaan);
+    }
+    return item;
+  });
 }

@@ -17,6 +17,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { QuestionItem, KisiKisiItem, QuestionOption } from '../types/assessment';
+import { sanitizePgQuestion } from '../utils/localGenerator';
 
 interface TabSoalProps {
   questions: QuestionItem[];
@@ -117,10 +118,14 @@ export const TabSoal: React.FC<TabSoalProps> = ({
     alert('Opsi pilihan ganda dan kunci jawaban berhasil diacak secara proporsional!');
   };
 
-  // Save manual edit on question
+  // Save manual edit on question (auto-sanitize PG to Kemdikbud standard)
   const handleSaveEditQuestion = () => {
     if (!editingQuestion) return;
-    const updated = questions.map((q) => (q.id === editingQuestion.id ? editingQuestion : q));
+    const itemToSave = { ...editingQuestion };
+    if (itemToSave.bentukSoal === 'Pilihan Ganda') {
+      itemToSave.pertanyaan = sanitizePgQuestion(itemToSave.pertanyaan);
+    }
+    const updated = questions.map((q) => (q.id === itemToSave.id ? itemToSave : q));
     onUpdateQuestions(updated);
     setEditingQuestion(null);
   };
@@ -146,6 +151,10 @@ export const TabSoal: React.FC<TabSoalProps> = ({
           <p className="text-xs text-gray-500 mt-0.5">
             Setiap butir soal memiliki trace badge langsung ke baris dan indikator kisi-kisi asalnya.
           </p>
+          <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>Kaidah Baku PG SD/MI: Pokok soal tanpa tanda tanya (?), diakhiri (....)</span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -452,12 +461,19 @@ export const TabSoal: React.FC<TabSoalProps> = ({
 
               <div>
                 <label className="block font-bold text-gray-700 mb-1">
-                  Kalimat Pertanyaan <span className="text-rose-500">*</span>
+                  {editingQuestion.bentukSoal === 'Pilihan Ganda' ? 'Pokok Soal (Pernyataan Belum Selesai diakhiri ....)' : 'Kalimat Pertanyaan'} <span className="text-rose-500">*</span>
                 </label>
+                {editingQuestion.bentukSoal === 'Pilihan Ganda' && (
+                  <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 p-2 rounded-xl mb-1.5 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span><strong>Kaidah Baku PG:</strong> Dilarang menggunakan tanda tanya (?). Pokok soal wajib berupa pernyataan belum selesai berakhiran 4 titik (....). Tanda tanya akan otomatis dibersihkan saat disimpan.</span>
+                  </p>
+                )}
                 <textarea
                   rows={3}
                   value={editingQuestion.pertanyaan}
                   onChange={(e) => setEditingQuestion({ ...editingQuestion, pertanyaan: e.target.value })}
+                  placeholder={editingQuestion.bentukSoal === 'Pilihan Ganda' ? 'Contoh: Bagian tumbuhan yang bertugas menyerap air adalah ....' : 'Contoh: Jelaskan fungsi akar!'}
                   className="w-full px-3 py-2 rounded-xl border border-gray-300 font-semibold text-xs sm:text-sm"
                 />
               </div>
