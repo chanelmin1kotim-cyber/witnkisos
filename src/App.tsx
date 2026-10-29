@@ -283,9 +283,11 @@ export default function App() {
 
     setIsRegeneratingId(questionId);
     let success = false;
+    const variationSeed = Date.now();
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const response = await fetch('/api/regenerate-single-question', {
         method: 'POST',
@@ -295,17 +297,24 @@ export default function App() {
           kisiKisiItem: matchedKisi,
           currentQuestion: targetQ,
           identity: currentProject.identity,
+          variationSeed,
         }),
       });
 
       clearTimeout(timeoutId);
       const resData = await response.json();
       if (resData.success && resData.data) {
+        let cleanQ = resData.data;
+        if (cleanQ.bentukSoal === 'Pilihan Ganda') {
+          cleanQ.pertanyaan = sanitizePgQuestion(cleanQ.pertanyaan);
+        }
+        cleanQ.id = questionId;
+
         const updatedList = currentProject.questions.map((q) =>
-          q.id === questionId ? resData.data : q
+          q.id === questionId ? cleanQ : q
         );
         handleUpdateQuestions(updatedList);
-        showToast(`Soal Nomor ${targetQ.nomorSoal} berhasil diregenerasi!`);
+        showToast(`Soal Nomor ${targetQ.nomorSoal} berhasil diperbarui dengan variasi baru!`);
         success = true;
       }
     } catch (error) {
@@ -313,12 +322,106 @@ export default function App() {
     }
 
     if (!success) {
-      const fallbackQ = generateLocalQuestionItem(matchedKisi, targetQ.nomorSoal - 1, currentProject.identity);
+      const fallbackQ = generateLocalQuestionItem(
+        matchedKisi,
+        targetQ.nomorSoal - 1,
+        currentProject.identity,
+        variationSeed
+      );
+      if (fallbackQ.bentukSoal === 'Pilihan Ganda') {
+        fallbackQ.pertanyaan = sanitizePgQuestion(fallbackQ.pertanyaan);
+      }
+      fallbackQ.id = questionId;
+
       const updatedList = currentProject.questions.map((q) =>
         q.id === questionId ? fallbackQ : q
       );
       handleUpdateQuestions(updatedList);
-      showToast(`Soal Nomor ${targetQ.nomorSoal} berhasil diregenerasi!`);
+      showToast(`Soal Nomor ${targetQ.nomorSoal} berhasil diperbarui dengan variasi baru!`);
+    }
+
+    setIsRegeneratingId(null);
+  };
+
+  // STEP 16B: Generate or Regenerate Single Question from Kisi-Kisi row
+  const handleGenerateSingleFromKisi = async (kisiItem: KisiKisiItem) => {
+    const existingQ = currentProject.questions.find(
+      (q) => q.nomorSoal === kisiItem.nomorSoal || q.kisiKisiId === kisiItem.id
+    );
+
+    setIsRegeneratingId(kisiItem.id);
+    let success = false;
+    const variationSeed = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch('/api/generate-single-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          kisiKisiItem: kisiItem,
+          currentQuestion: existingQ,
+          identity: currentProject.identity,
+          variationSeed,
+        }),
+      });
+
+      clearTimeout(timeoutId);
+      const resData = await response.json();
+      if (resData.success && resData.data) {
+        let cleanQ = resData.data;
+        if (cleanQ.bentukSoal === 'Pilihan Ganda') {
+          cleanQ.pertanyaan = sanitizePgQuestion(cleanQ.pertanyaan);
+        }
+
+        if (existingQ) {
+          cleanQ.id = existingQ.id;
+          const updatedList = currentProject.questions.map((q) =>
+            q.id === existingQ.id || q.nomorSoal === kisiItem.nomorSoal ? cleanQ : q
+          );
+          handleUpdateQuestions(updatedList);
+        } else {
+          const updatedList = [...currentProject.questions, cleanQ].sort(
+            (a, b) => a.nomorSoal - b.nomorSoal
+          );
+          handleUpdateQuestions(updatedList);
+        }
+
+        showToast(`Soal Nomor ${kisiItem.nomorSoal} berhasil dibuat berbasis indikator!`);
+        success = true;
+      }
+    } catch (error) {
+      console.warn('API generate single from kisi fallback:', error);
+    }
+
+    if (!success) {
+      const localQ = generateLocalQuestionItem(
+        kisiItem,
+        kisiItem.nomorSoal - 1,
+        currentProject.identity,
+        variationSeed
+      );
+      if (localQ.bentukSoal === 'Pilihan Ganda') {
+        localQ.pertanyaan = sanitizePgQuestion(localQ.pertanyaan);
+      }
+
+      if (existingQ) {
+        localQ.id = existingQ.id;
+        const updatedList = currentProject.questions.map((q) =>
+          q.id === existingQ.id || q.nomorSoal === kisiItem.nomorSoal ? localQ : q
+        );
+        handleUpdateQuestions(updatedList);
+      } else {
+        const updatedList = [...currentProject.questions, localQ].sort(
+          (a, b) => a.nomorSoal - b.nomorSoal
+        );
+        handleUpdateQuestions(updatedList);
+      }
+
+      showToast(`Soal Nomor ${kisiItem.nomorSoal} berhasil dibuat berbasis indikator!`);
     }
 
     setIsRegeneratingId(null);
@@ -585,9 +688,13 @@ export default function App() {
           {activeTab === 'kisi' && (
             <TabKisiKisi
               kisiKisi={currentProject.kisiKisi}
+              questions={currentProject.questions}
               onUpdateKisiKisi={handleUpdateKisiKisi}
               onGenerateQuestions={handleGenerateQuestions}
               isGeneratingQuestions={isGeneratingQuestions}
+              onGenerateSingleQuestion={handleGenerateSingleFromKisi}
+              isGeneratingSingleId={isRegeneratingId}
+              onNavigateToQuestion={() => setActiveTab('soal')}
             />
           )}
 

@@ -16,23 +16,33 @@ import {
   FileSpreadsheet,
   Check,
   X,
-  Wand2
+  Wand2,
+  RefreshCw,
+  Eye
 } from 'lucide-react';
-import { KisiKisiItem, CognitiveLevel, BentukSoal } from '../types/assessment';
+import { KisiKisiItem, CognitiveLevel, BentukSoal, QuestionItem } from '../types/assessment';
 import { exportKisiKisiToCSV, parseCSVToKisiKisi } from '../utils/excelImportExport';
 
 interface TabKisiKisiProps {
   kisiKisi: KisiKisiItem[];
+  questions?: QuestionItem[];
   onUpdateKisiKisi: (updated: KisiKisiItem[]) => void;
   onGenerateQuestions: () => void;
   isGeneratingQuestions: boolean;
+  onGenerateSingleQuestion?: (kisiItem: KisiKisiItem) => Promise<void>;
+  isGeneratingSingleId?: string | null;
+  onNavigateToQuestion?: (nomorSoal: number) => void;
 }
 
 export const TabKisiKisi: React.FC<TabKisiKisiProps> = ({
   kisiKisi,
+  questions = [],
   onUpdateKisiKisi,
   onGenerateQuestions,
   isGeneratingQuestions,
+  onGenerateSingleQuestion,
+  isGeneratingSingleId,
+  onNavigateToQuestion,
 }) => {
   // Modal / Inline Edit state
   const [editingItem, setEditingItem] = useState<KisiKisiItem | null>(null);
@@ -272,20 +282,21 @@ export const TabKisiKisi: React.FC<TabKisiKisiProps> = ({
             <thead>
               <tr className="bg-emerald-800 text-white font-bold border-b border-emerald-900 text-center text-xs">
                 <th className="py-3 px-2 w-12 border-r border-emerald-700/60">No.</th>
-                <th className="py-3 px-3 w-48 text-left border-r border-emerald-700/60">Capaian Pembelajaran</th>
-                <th className="py-3 px-3 w-52 text-left border-r border-emerald-700/60">Tujuan Pembelajaran</th>
-                <th className="py-3 px-3 w-40 text-left border-r border-emerald-700/60">Materi Ajar</th>
-                <th className="py-3 px-3 min-w-[280px] text-left border-r border-emerald-700/60">Indikator Soal</th>
-                <th className="py-3 px-2 w-16 border-r border-emerald-700/60">Level</th>
-                <th className="py-3 px-2 w-28 border-r border-emerald-700/60">Bentuk Soal</th>
-                <th className="py-3 px-2 w-16 border-r border-emerald-700/60">Nomor Soal</th>
-                <th className="py-3 px-2 w-28">Aksi</th>
+                <th className="py-3 px-3 w-44 text-left border-r border-emerald-700/60">Capaian Pembelajaran</th>
+                <th className="py-3 px-3 w-48 text-left border-r border-emerald-700/60">Tujuan Pembelajaran</th>
+                <th className="py-3 px-3 w-36 text-left border-r border-emerald-700/60">Materi Ajar</th>
+                <th className="py-3 px-3 min-w-[260px] text-left border-r border-emerald-700/60">Indikator Soal</th>
+                <th className="py-3 px-2 w-14 border-r border-emerald-700/60">Level</th>
+                <th className="py-3 px-2 w-24 border-r border-emerald-700/60">Bentuk Soal</th>
+                <th className="py-3 px-2 w-14 border-r border-emerald-700/60">No. Soal</th>
+                <th className="py-3 px-2 w-36 border-r border-emerald-700/60">Generator Per-Soal</th>
+                <th className="py-3 px-2 w-28">Aksi Kisi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-gray-800">
               {kisiKisi.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-gray-500">
+                  <td colSpan={10} className="py-12 text-center text-gray-500">
                     <HelpCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="font-semibold">Belum ada baris kisi-kisi.</p>
                     <p className="text-xs text-gray-400 mt-1">
@@ -294,116 +305,166 @@ export const TabKisiKisi: React.FC<TabKisiKisiProps> = ({
                   </td>
                 </tr>
               ) : (
-                kisiKisi.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    className={`hover:bg-emerald-50/50 transition-colors ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'
-                    }`}
-                  >
-                    {/* No. */}
-                    <td className="py-3 px-2 text-center font-bold text-gray-600 border-r border-gray-200/80">
-                      {item.nomorSoal}
-                    </td>
+                kisiKisi.map((item, index) => {
+                  const existingQ = questions.find((q) => q.nomorSoal === item.nomorSoal || q.kisiKisiId === item.id);
+                  const isProcessingThisRow = isGeneratingSingleId === item.id;
 
-                    {/* CP */}
-                    <td className="py-3 px-3 text-xs text-gray-700 line-clamp-3 border-r border-gray-200/80">
-                      {item.capaianPembelajaran}
-                    </td>
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`hover:bg-emerald-50/50 transition-colors ${
+                        index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'
+                      }`}
+                    >
+                      {/* No. */}
+                      <td className="py-3 px-2 text-center font-bold text-gray-600 border-r border-gray-200/80">
+                        {item.nomorSoal}
+                      </td>
 
-                    {/* TP */}
-                    <td className="py-3 px-3 text-xs text-gray-700 border-r border-gray-200/80">
-                      {item.tujuanPembelajaran}
-                    </td>
+                      {/* CP */}
+                      <td className="py-3 px-3 text-xs text-gray-700 line-clamp-3 border-r border-gray-200/80">
+                        {item.capaianPembelajaran}
+                      </td>
 
-                    {/* Materi Ajar */}
-                    <td className="py-3 px-3 font-semibold text-emerald-950 border-r border-gray-200/80">
-                      <span className="px-2 py-0.5 rounded bg-emerald-100/70 text-emerald-900 border border-emerald-200 text-xs inline-block">
-                        {item.materiAjar}
-                      </span>
-                    </td>
+                      {/* TP */}
+                      <td className="py-3 px-3 text-xs text-gray-700 border-r border-gray-200/80">
+                        {item.tujuanPembelajaran}
+                      </td>
 
-                    {/* Indikator Soal */}
-                    <td className="py-3 px-3 text-xs leading-relaxed font-medium text-gray-900 border-r border-gray-200/80 bg-amber-50/30">
-                      {item.indikatorSoal}
-                    </td>
+                      {/* Materi Ajar */}
+                      <td className="py-3 px-3 font-semibold text-emerald-950 border-r border-gray-200/80">
+                        <span className="px-2 py-0.5 rounded bg-emerald-100/70 text-emerald-900 border border-emerald-200 text-xs inline-block">
+                          {item.materiAjar}
+                        </span>
+                      </td>
 
-                    {/* Level */}
-                    <td className="py-3 px-2 text-center border-r border-gray-200/80">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
-                          item.level === 'L1'
-                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                            : item.level === 'L2'
-                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                            : 'bg-purple-100 text-purple-800 border border-purple-200'
-                        }`}
-                      >
-                        {item.level}
-                      </span>
-                    </td>
+                      {/* Indikator Soal */}
+                      <td className="py-3 px-3 text-xs leading-relaxed font-medium text-gray-900 border-r border-gray-200/80 bg-amber-50/30">
+                        {item.indikatorSoal}
+                      </td>
 
-                    {/* Bentuk Soal */}
-                    <td className="py-3 px-2 text-center border-r border-gray-200/80 text-xs font-semibold">
-                      <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800">
-                        {item.bentukSoal}
-                      </span>
-                    </td>
-
-                    {/* Nomor Soal */}
-                    <td className="py-3 px-2 text-center font-black text-emerald-900 border-r border-gray-200/80">
-                      {item.nomorSoal}
-                    </td>
-
-                    {/* Aksi */}
-                    <td className="py-3 px-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingItem(item)}
-                          className="p-1 rounded text-blue-600 hover:bg-blue-50 transition"
-                          title="Edit Baris Ini"
+                      {/* Level */}
+                      <td className="py-3 px-2 text-center border-r border-gray-200/80">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${
+                            item.level === 'L1'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : item.level === 'L2'
+                              ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                              : 'bg-purple-100 text-purple-800 border border-purple-200'
+                          }`}
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateRow(item)}
-                          className="p-1 rounded text-teal-600 hover:bg-teal-50 transition"
-                          title="Duplikasi Baris"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveUp(index)}
-                          disabled={index === 0}
-                          className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
-                          title="Pindah Naik"
-                        >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveDown(index)}
-                          disabled={index === kisiKisi.length - 1}
-                          className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
-                          title="Pindah Turun"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteRow(item.id)}
-                          className="p-1 rounded text-rose-500 hover:bg-rose-50 transition"
-                          title="Hapus Baris"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {item.level}
+                        </span>
+                      </td>
+
+                      {/* Bentuk Soal */}
+                      <td className="py-3 px-2 text-center border-r border-gray-200/80 text-xs font-semibold">
+                        <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800">
+                          {item.bentukSoal}
+                        </span>
+                      </td>
+
+                      {/* Nomor Soal */}
+                      <td className="py-3 px-2 text-center font-black text-emerald-900 border-r border-gray-200/80">
+                        {item.nomorSoal}
+                      </td>
+
+                      {/* Generator Per-Soal */}
+                      <td className="py-3 px-2 border-r border-gray-200/80 text-center">
+                        {existingQ ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Siap
+                            </span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => onGenerateSingleQuestion?.(item)}
+                                disabled={isProcessingThisRow}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition shadow-2xs disabled:opacity-50"
+                                title="Rumuskan ulang butir soal ini dengan variasi baru"
+                              >
+                                <RefreshCw className={`w-3 h-3 text-amber-700 ${isProcessingThisRow ? 'animate-spin' : ''}`} />
+                                {isProcessingThisRow ? 'Proses...' : 'Ulang'}
+                              </button>
+                              {onNavigateToQuestion && (
+                                <button
+                                  type="button"
+                                  onClick={() => onNavigateToQuestion(item.nomorSoal)}
+                                  className="p-1 rounded text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                                  title="Lihat Soal di Tab Soal"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onGenerateSingleQuestion?.(item)}
+                            disabled={isProcessingThisRow}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs transition disabled:opacity-50"
+                            title="Generate Soal khusus untuk baris indikator ini"
+                          >
+                            <Sparkles className={`w-3 h-3 text-amber-300 ${isProcessingThisRow ? 'animate-spin' : ''}`} />
+                            {isProcessingThisRow ? 'Membuat...' : 'Buat Soal'}
+                          </button>
+                        )}
+                      </td>
+
+                      {/* Aksi Baris Kisi-Kisi */}
+                      <td className="py-3 px-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingItem(item)}
+                            className="p-1 rounded text-blue-600 hover:bg-blue-50 transition"
+                            title="Edit Baris Ini"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateRow(item)}
+                            className="p-1 rounded text-teal-600 hover:bg-teal-50 transition"
+                            title="Duplikasi Baris"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveUp(index)}
+                            disabled={index === 0}
+                            className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                            title="Pindah Naik"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveDown(index)}
+                            disabled={index === kisiKisi.length - 1}
+                            className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-20"
+                            title="Pindah Turun"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRow(item.id)}
+                            className="p-1 rounded text-rose-500 hover:bg-rose-50 transition"
+                            title="Hapus Baris"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

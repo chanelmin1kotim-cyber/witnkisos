@@ -116,6 +116,27 @@ function sanitizePgQuestion(text: string): string {
   return `${str} ....`;
 }
 
+function makeShuffledOptions(correctText: string, distractors: string[], seed: number) {
+  const allTexts = [correctText, ...distractors.slice(0, 3)];
+  // Deterministic pseudo-shuffle based on seed
+  const shuffled = [...allTexts].sort((a, b) => {
+    const hashA = Math.sin(seed + a.length * 13 + 7);
+    const hashB = Math.sin(seed + b.length * 17 + 11);
+    return hashA - hashB;
+  });
+
+  const labels: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
+  const opsi = labels.map((label, idx) => ({
+    label,
+    text: shuffled[idx] || `Pilihan ${label}`
+  }));
+
+  const correctIndex = shuffled.indexOf(correctText);
+  const kunciJawaban = labels[correctIndex >= 0 ? correctIndex : 0];
+
+  return { opsi, kunciJawaban };
+}
+
 /**
  * Subject-Aware Authentic Generator for SD/MI:
  * Creates concrete, age-appropriate questions and options directly matching curriculum subjects.
@@ -126,33 +147,47 @@ function generateConcreteQuestionItem(
   index: number,
   jenjang: string,
   kelas: number,
-  mataPelajaran: string
+  mataPelajaran: string,
+  variationSeed: number = Date.now()
 ) {
   const materiLower = (kisi.materiAjar || '').toLowerCase();
   const indikatorLower = (kisi.indikatorSoal || '').toLowerCase();
   const nomor = kisi.nomorSoal || index + 1;
   const isPg = kisi.bentukSoal === 'Pilihan Ganda';
   const level = kisi.level || 'L2';
+  const vSeed = variationSeed + nomor * 29;
 
   // --- MATEMATIKA SD/MI ---
   if (mataPelajaran.toLowerCase().includes('matematika') || materiLower.includes('pecahan') || materiLower.includes('hitung') || materiLower.includes('bilangan')) {
     if (materiLower.includes('senilai') || indikatorLower.includes('senilai')) {
+      const fractionPairs = [
+        { q: '1/2', ans: '2/4', distractors: ['2/6', '3/8', '3/5'], exp: '1/2 dikalikan 2/2 = 2/4' },
+        { q: '2/3', ans: '4/6', distractors: ['3/6', '4/9', '2/6'], exp: '2/3 dikalikan 2/2 = 4/6' },
+        { q: '3/4', ans: '6/8', distractors: ['3/8', '6/12', '4/8'], exp: '3/4 dikalikan 2/2 = 6/8' },
+        { q: '1/3', ans: '3/9', distractors: ['2/9', '3/6', '1/6'], exp: '1/3 dikalikan 3/3 = 3/9' },
+        { q: '2/5', ans: '4/10', distractors: ['2/10', '3/10', '4/15'], exp: '2/5 dikalikan 2/2 = 4/10' }
+      ];
+      const selected = fractionPairs[Math.abs(Math.floor(vSeed)) % fractionPairs.length];
+      const { opsi, kunciJawaban } = makeShuffledOptions(selected.ans, selected.distractors, vSeed);
+
       return {
         id: `q-concrete-${Date.now()}-${nomor}`,
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
         stimulus: 'Pecahan senilai adalah pecahan yang memiliki nilai sama meskipun dituliskan dalam bentuk pembilang dan penyebut yang berbeda.',
-        pertanyaan: 'Pecahan berikut ini yang senilai dengan pecahan 2/4 adalah ....',
+        pertanyaan: `Pecahan berikut ini yang senilai dengan pecahan ${selected.q} adalah ....`,
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
-        opsi: [
-          { label: 'A', text: '1/2' },
-          { label: 'B', text: '2/6' },
-          { label: 'C', text: '3/8' },
-          { label: 'D', text: '3/5' }
-        ],
-        kunciJawaban: 'A',
-        pembahasan: 'Pecahan 2/4 jika pembilang dan penyebutnya sama-sama dibagi 2 akan menghasilkan (2:2)/(4:2) = 1/2. Jadi 2/4 senilai dengan 1/2.',
+        opsi: isPg ? opsi : undefined,
+        kunciJawaban: isPg ? kunciJawaban : `Pecahan senilai dari ${selected.q} adalah ${selected.ans} karena pembilang dan penyebut dikalikan dengan angka yang sama.`,
+        pembahasan: `Pecahan ${selected.q} senilai dengan ${selected.ans} (${selected.exp}).`,
+        rubrikPenskoran: !isPg ? {
+          skor4: 'Jawaban tepat disertai cara perkalian/pembagian pecahan senilai dengan benar.',
+          skor3: 'Jawaban pecahan senilai benar tanpa langkah detail.',
+          skor2: 'Menyebutkan konsep pecahan senilai namun angka kurang tepat.',
+          skor1: 'Hanya menulis ulang soal.',
+          skor0: 'Tidak menjawab.'
+        } : undefined,
         kesesuaianIndikator: 'Sangat Sesuai',
         kesesuaianPersen: 100,
         catatanValidasi: 'Opsi konkret berupa bilangan pecahan ramah anak SD/MI.'
@@ -160,22 +195,32 @@ function generateConcreteQuestionItem(
     }
 
     if (materiLower.includes('banding') || indikatorLower.includes('banding') || indikatorLower.includes('besar') || indikatorLower.includes('kecil')) {
+      const compareVariants = [
+        { name1: 'Budi', name2: 'Siti', p1: '3/8', p2: '5/8', sym: '< (lebih kecil dari)', wrong: ['> (lebih besar dari)', '= (sama dengan)', '+ (ditambah)'] },
+        { name1: 'Edo', name2: 'Lani', p1: '4/7', p2: '2/7', sym: '> (lebih besar dari)', wrong: ['< (lebih kecil dari)', '= (sama dengan)', '≤ (kurang dari)'] },
+        { name1: 'Dayu', name2: 'Beni', p1: '2/6', p2: '4/6', sym: '< (lebih kecil dari)', wrong: ['> (lebih besar dari)', '= (sama dengan)', '≠ (tidak sama)'] }
+      ];
+      const cv = compareVariants[Math.abs(Math.floor(vSeed)) % compareVariants.length];
+      const { opsi, kunciJawaban } = makeShuffledOptions(cv.sym, cv.wrong, vSeed);
+
       return {
         id: `q-concrete-${Date.now()}-${nomor}`,
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
-        stimulus: 'Ibu memotong semangka menjadi 8 bagian sama besar. Kakak memakan 3 potong (3/8) dan Adik memakan 5 potong (5/8).',
-        pertanyaan: 'Tanda perbandingan yang tepat untuk membandingkan pecahan 3/8 ... 5/8 adalah ....',
+        stimulus: `${cv.name1} dan ${cv.name2} masing-masing memiliki kue bolu yang dipotong sama besar. ${cv.name1} memakan ${cv.p1} bagian, sedangkan ${cv.name2} memakan ${cv.p2} bagian.`,
+        pertanyaan: `Tanda perbandingan yang tepat untuk membandingkan pecahan ${cv.p1} ... ${cv.p2} adalah ....`,
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
-        opsi: [
-          { label: 'A', text: '< (lebih kecil dari)' },
-          { label: 'B', text: '> (lebih besar dari)' },
-          { label: 'C', text: '= (sama dengan)' },
-          { label: 'D', text: '+ (ditambah)' }
-        ],
-        kunciJawaban: 'A',
-        pembahasan: 'Karena penyebut kedua pecahan sudah sama (8), kita bandingkan pembilangnya. 3 lebih kecil dari 5, sehingga 3/8 < 5/8.',
+        opsi: isPg ? opsi : undefined,
+        kunciJawaban: isPg ? kunciJawaban : `Tanda perbandingan adalah ${cv.sym} karena penyebutnya sama dan pembilang dibandingkan secara langsung.`,
+        pembahasan: `Karena penyebut kedua pecahan sudah sama, kita cukup membandingkan pembilangnya. Sehingga ${cv.p1} ${cv.sym} ${cv.p2}.`,
+        rubrikPenskoran: !isPg ? {
+          skor4: 'Tanda perbandingan tepat disertai alasan perbandingan pembilang.',
+          skor3: 'Tanda perbandingan tepat tanpa penjelasan.',
+          skor2: 'Penjelasan benar namun tanda salah tulis.',
+          skor1: 'Jawaban kurang tepat.',
+          skor0: 'Tidak menjawab.'
+        } : undefined,
         kesesuaianIndikator: 'Sangat Sesuai',
         kesesuaianPersen: 100,
         catatanValidasi: 'Opsi berupa simbol perbandingan matematika yang terukur.'
@@ -183,45 +228,63 @@ function generateConcreteQuestionItem(
     }
 
     if (materiLower.includes('operasi') || indikatorLower.includes('jumlah') || indikatorLower.includes('hitung')) {
+      const opVariants = [
+        { p1: '2/7', p2: '3/7', ans: '5/7 kg', w: ['5/14 kg', '6/7 kg', '1/7 kg'], exp: '2/7 + 3/7 = 5/7 kg' },
+        { p1: '1/5', p2: '3/5', ans: '4/5 meter', w: ['4/10 meter', '2/5 meter', '1/5 meter'], exp: '1/5 + 3/5 = 4/5 meter' },
+        { p1: '2/9', p2: '5/9', ans: '7/9 liter', w: ['7/18 liter', '3/9 liter', '6/9 liter'], exp: '2/9 + 5/9 = 7/9 liter' }
+      ];
+      const ov = opVariants[Math.abs(Math.floor(vSeed)) % opVariants.length];
+      const { opsi, kunciJawaban } = makeShuffledOptions(ov.ans, ov.w, vSeed);
+
       return {
         id: `q-concrete-${Date.now()}-${nomor}`,
         nomorSoal: nomor,
         kisiKisiId: kisi.id,
-        stimulus: 'Paman membeli 2/7 kg gula pasir di warung, kemudian bibi membeli lagi 3/7 kg gula pasir.',
-        pertanyaan: 'Jumlah seluruh gula pasir yang dibeli paman dan bibi adalah ....',
+        stimulus: `Paman membawa ${ov.p1} dari kebun, kemudian bibi menambahkan lagi ${ov.p2}.`,
+        pertanyaan: 'Jumlah keseluruhan yang dikumpulkan oleh paman dan bibi adalah ....',
         bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
         level,
-        opsi: [
-          { label: 'A', text: '5/7 kg' },
-          { label: 'B', text: '5/14 kg' },
-          { label: 'C', text: '6/7 kg' },
-          { label: 'D', text: '1/7 kg' }
-        ],
-        kunciJawaban: 'A',
-        pembahasan: 'Penjumlahan pecahan dengan penyebut sama: 2/7 + 3/7 = (2+3)/7 = 5/7 kg.',
+        opsi: isPg ? opsi : undefined,
+        kunciJawaban: isPg ? kunciJawaban : `Perhitungan: ${ov.exp}.`,
+        pembahasan: `Penjumlahan pecahan berpenyebut sama dilakukan dengan menjumlahkan pembilangnya: ${ov.exp}.`,
+        rubrikPenskoran: !isPg ? {
+          skor4: 'Langkah penjumlahan pecahan berpenyebut sama ditulis lengkap dan hasilnya tepat.',
+          skor3: 'Hasil tepat tanpa menuliskan langkah penjumlahan.',
+          skor2: 'Hanya menuliskan rumus pecahan.',
+          skor1: 'Jawaban salah atau penyebut ikut dijumlahkan.',
+          skor0: 'Tidak menjawab.'
+        } : undefined,
         kesesuaianIndikator: 'Sangat Sesuai',
         kesesuaianPersen: 100,
         catatanValidasi: 'Opsi angka dan satuan berat konkret.'
       };
     }
 
-    // Default context math
+    // Default context math (Keliling/Luas)
+    const sideLengths = [5, 6, 8, 9, 12];
+    const s = sideLengths[Math.abs(Math.floor(vSeed)) % sideLengths.length];
+    const ansK = `${4 * s} cm`;
+    const wK = [`${s * s} cm`, `${2 * s} cm`, `${3 * s} cm`];
+    const { opsi, kunciJawaban } = makeShuffledOptions(ansK, wK, vSeed);
+
     return {
       id: `q-concrete-${Date.now()}-${nomor}`,
       nomorSoal: nomor,
       kisiKisiId: kisi.id,
-      stimulus: `Perhatikan permasalahan matematika mengenai materi ${kisi.materiAjar} berikut ini:`,
-      pertanyaan: `Sebuah bangun persegi memiliki panjang sisi 6 cm. Keliling persegi tersebut adalah ....`,
+      stimulus: `Sebuah bangun persegi memiliki panjang sisi ${s} cm.`,
+      pertanyaan: `Keliling bangun persegi tersebut adalah ....`,
       bentukSoal: isPg ? 'Pilihan Ganda' : 'Uraian',
       level,
-      opsi: [
-        { label: 'A', text: '24 cm' },
-        { label: 'B', text: '36 cm' },
-        { label: 'C', text: '18 cm' },
-        { label: 'D', text: '12 cm' }
-      ],
-      kunciJawaban: 'A',
-      pembahasan: 'Keliling persegi = 4 x sisi = 4 x 6 cm = 24 cm.',
+      opsi: isPg ? opsi : undefined,
+      kunciJawaban: isPg ? kunciJawaban : `Keliling persegi = 4 x sisi = 4 x ${s} cm = ${4 * s} cm.`,
+      pembahasan: `Rumus keliling persegi adalah 4 x sisi: 4 x ${s} cm = ${4 * s} cm.`,
+      rubrikPenskoran: !isPg ? {
+        skor4: 'Rumus ditulis benar (4 x s), langkah substitusi tepat, dan hasil akhir benar dengan satuan.',
+        skor3: 'Hasil akhir benar dengan satuan tanpa rumus.',
+        skor2: 'Rumus benar namun salah perhitungan.',
+        skor1: 'Salah menggunakan rumus keliling.',
+        skor0: 'Tidak menjawab.'
+      } : undefined,
       kesesuaianIndikator: 'Sangat Sesuai',
       kesesuaianPersen: 100,
       catatanValidasi: 'Opsi angka pengukuran yang terverifikasi.'
@@ -752,47 +815,54 @@ KEMBALIKAN HANYA FORMAT JSON (ARRAY OF OBJECTS):
 });
 
 /**
- * 3. POST /api/regenerate-single-question
- * Regenerate single question keeping CP, TP, Materi, Indikator, Level, Bentuk, Nomor Soal
+ * 3. POST /api/regenerate-single-question & POST /api/generate-single-question
+ * Generates or regenerates a single question unit strictly matching 1 row of kisi-kisi
  */
-app.post('/api/regenerate-single-question', async (req, res) => {
+const handleSingleQuestion = async (req: express.Request, res: express.Response) => {
   try {
-    const { kisiKisiItem, currentQuestion, identity = {} } = req.body;
+    const kisiKisiItem = req.body.kisiKisiItem || req.body.kisi || req.body;
+    const currentQuestion = req.body.currentQuestion || req.body.question;
+    const identity = req.body.identity || {};
+    const variationSeed = req.body.variationSeed || Date.now();
 
     if (!kisiKisiItem) {
-      return res.status(400).json({ success: false, error: 'Data kisi-kisi wajib disediakan.' });
+      return res.status(400).json({ success: false, error: 'Data baris kisi-kisi wajib disediakan.' });
     }
 
     const { jenjang = 'SD', kelas = 4, mataPelajaran = 'Matematika' } = identity;
+    const targetNomor = kisiKisiItem.nomorSoal || (currentQuestion?.nomorSoal || 1);
+    const finalId = currentQuestion?.id || req.body.questionId || req.body.id || `q-${Date.now()}-${targetNomor}`;
 
     if (hasValidApiKey()) {
-      const prompt = `Anda adalah Master Penyusun Soal Asesmen SD/MI.
-Lakukan REGENERASI untuk 1 SOAL berikut ini.
+      const prompt = `Anda adalah Master Penyusun Soal Asesmen SD/MI (Disusun By Witno).
+Tugas: Buat atau Rumuskan Ulang 1 BUTIR SOAL yang 100% selaras dengan baris kisi-kisi berikut:
 
-ATURAN KETAT:
-- NOMOR SOAL: ${kisiKisiItem.nomorSoal}
-- CP: ${kisiKisiItem.capaianPembelajaran}
-- TP: ${kisiKisiItem.tujuanPembelajaran}
+DATA KISI-KISI:
+- Nomor Soal: ${targetNomor}
+- Capaian Pembelajaran: ${kisiKisiItem.capaianPembelajaran}
+- Tujuan Pembelajaran: ${kisiKisiItem.tujuanPembelajaran}
 - Materi Ajar: ${kisiKisiItem.materiAjar}
-- INDIKATOR SOAL: ${kisiKisiItem.indikatorSoal}
-- LEVEL: ${kisiKisiItem.level}
-- BENTUK SOAL: ${kisiKisiItem.bentukSoal}
-- Jenjang: ${jenjang} Kelas ${kelas}
+- Indikator Soal: ${kisiKisiItem.indikatorSoal}
+- Level Kognitif: ${kisiKisiItem.level}
+- Bentuk Soal: ${kisiKisiItem.bentukSoal}
+- Sasaran: ${jenjang} Kelas ${kelas}
 - Mata Pelajaran: ${mataPelajaran}
 
-ATURAN FORMAT SOAL:
-1. KAIDAH PILIHAN GANDA: DILARANG KERAS MENGGUNAKAN TANDA TANYA (?) PADA PILIHAN GANDA!
-   Pokok soal PG WAJIB berupa kalimat pernyataan belum selesai yang diakhiri 4 titik (....).
-   Tanda tanya (?) HANYA boleh untuk soal Uraian jika diperlukan.
-2. Opsi A, B, C, D HARUS 100% SINGKRON dan menjawab pertanyaan secara konkret.
-3. DILARANG KERAS menggunakan kata-kata teoretis seperti "Penerapan konsep pokok".
-4. Gunakan angka, nama benda, pecahan, atau kalimat nyata yang ramah anak SD/MI.
-5. Kunci jawaban harus benar-benar akurat.
+${currentQuestion?.pertanyaan ? `SOAL SEBELUMNYA (JANGAN DIULANG SAMA PERSIS, BUAT VARIASI BARU DENGAN ANGKA / KONTEKS / NAMA ANAK SD BARU):
+"${currentQuestion.pertanyaan}"` : ''}
 
-Kembalikan format JSON:
+PEDOMAN BAKU PENYUSUNAN SOAL SD/MI:
+1. POKOK SOAL PILIHAN GANDA (PG): DILARANG KERAS MENGGUNAKAN TANDA TANYA (?) PADA PILIHAN GANDA!
+   Pokok soal PG WAJIB berupa kalimat pernyataan belum selesai yang diakhiri 4 titik (....).
+   (Tanda tanya ? HANYA boleh jika bentuk soal adalah Uraian).
+2. OPSI PILIHAN GANDA: HARUS 100% KONKRET, LOGIS, dan menjawab pokok soal. Dilarang kata-kata abstrak seperti "penerapan konsep".
+3. KUNCI JAWABAN: Harus tepat, jelas, dan kunci diacak (bisa A, B, C, atau D).
+4. PEMBAHASAN: Berisi penalaran sederhana dan runtut ramah anak usia SD/MI.
+
+KEMBALIKAN HANYA FORMAT JSON BERIKUT:
 {
-  "stimulus": "teks stimulus baru yang menarik bagi anak SD/MI",
-  "pertanyaan": "pernyataan belum selesai berakhiran .... (untuk PG) atau pertanyaan jelas (untuk Uraian)",
+  "stimulus": "teks pengantar/cerita kontekstual singkat",
+  "pertanyaan": "pernyataan belum selesai berakhiran .... (untuk PG) atau kalimat tanya (untuk Uraian)",
   "opsi": [
     { "label": "A", "text": "opsi konkret A" },
     { "label": "B", "text": "opsi konkret B" },
@@ -800,8 +870,14 @@ Kembalikan format JSON:
     { "label": "D", "text": "opsi konkret D" }
   ],
   "kunciJawaban": "A" | "B" | "C" | "D",
-  "pembahasan": "penjelasan alur berpikir ramah anak",
-  "rubrikPenskoran": { "skor4": "...", "skor3": "...", "skor2": "...", "skor1": "...", "skor0": "..." }
+  "pembahasan": "penjelasan logis dan sederhana",
+  "rubrikPenskoran": {
+    "skor4": "...",
+    "skor3": "...",
+    "skor2": "...",
+    "skor1": "...",
+    "skor0": "..."
+  }
 }`;
 
       try {
@@ -809,7 +885,7 @@ Kembalikan format JSON:
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
-            temperature: 0.3,
+            temperature: 0.35,
           },
         });
 
@@ -817,45 +893,59 @@ Kembalikan format JSON:
         const cleanJson = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(cleanJson);
 
-        let cleanPertanyaan = parsed.pertanyaan || 'Pertanyaan hasil regenerasi.';
+        let cleanPertanyaan = parsed.pertanyaan || 'Pertanyaan hasil rumusan berbasis indikator.';
         if (kisiKisiItem.bentukSoal === 'Pilihan Ganda') {
           cleanPertanyaan = sanitizePgQuestion(cleanPertanyaan);
         }
 
         const updated = {
-          id: currentQuestion?.id || `q-${Date.now()}`,
-          nomorSoal: kisiKisiItem.nomorSoal,
+          id: finalId,
+          nomorSoal: targetNomor,
           kisiKisiId: kisiKisiItem.id,
           stimulus: parsed.stimulus || '',
           pertanyaan: cleanPertanyaan,
           bentukSoal: kisiKisiItem.bentukSoal,
           level: kisiKisiItem.level,
-          opsi: parsed.opsi,
-          kunciJawaban: parsed.kunciJawaban || 'A',
-          pembahasan: parsed.pembahasan || 'Pembahasan baru yang ramah anak.',
+          opsi: kisiKisiItem.bentukSoal === 'Pilihan Ganda' ? parsed.opsi : undefined,
+          kunciJawaban: parsed.kunciJawaban || (kisiKisiItem.bentukSoal === 'Pilihan Ganda' ? 'A' : 'Kunci jawaban terlampir'),
+          pembahasan: parsed.pembahasan || 'Pembahasan terstruktur.',
           rubrikPenskoran: parsed.rubrikPenskoran,
           kesesuaianIndikator: 'Sangat Sesuai',
           kesesuaianPersen: 100,
-          catatanValidasi: 'Opsi jawaban telah disempurnakan dan sesuai kaidah PG tanpa tanda tanya.'
+          catatanValidasi: '100% selaras dengan indikator kisi-kisi dan kaidah bahasa SD/MI.'
         };
 
-        return res.json({ success: true, data: updated });
+        return res.json({ success: true, data: updated, source: 'ai' });
       } catch (geminiErr) {
-        console.warn('Gemini regenerate single error, using fallback:', geminiErr);
+        console.warn('Gemini single question generation error, fallback to concrete engine:', geminiErr);
       }
     }
 
-    // Concrete fallback
-    const concrete = generateConcreteQuestionItem(kisiKisiItem, kisiKisiItem.nomorSoal - 1, jenjang, kelas, mataPelajaran);
+    // High quality dynamic fallback generator
+    const concrete = generateConcreteQuestionItem(
+      kisiKisiItem,
+      targetNomor - 1,
+      jenjang,
+      kelas,
+      mataPelajaran,
+      variationSeed
+    );
     if (concrete.bentukSoal === 'Pilihan Ganda') {
       concrete.pertanyaan = sanitizePgQuestion(concrete.pertanyaan);
     }
-    return res.json({ success: true, data: concrete });
+    concrete.id = finalId;
+    concrete.nomorSoal = targetNomor;
+    concrete.kisiKisiId = kisiKisiItem.id;
+
+    return res.json({ success: true, data: concrete, source: 'built-in-engine' });
   } catch (error: any) {
-    console.error('Error regenerating question:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Gagal regenerasi soal' });
+    console.error('Error generating single question:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Gagal merumuskan butir soal' });
   }
-});
+};
+
+app.post('/api/regenerate-single-question', handleSingleQuestion);
+app.post('/api/generate-single-question', handleSingleQuestion);
 
 /**
  * 4. POST /api/validate-assessment

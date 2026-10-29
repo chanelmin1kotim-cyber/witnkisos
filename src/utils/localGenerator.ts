@@ -109,10 +109,31 @@ export function generateLocalKisiKisi(
   return items;
 }
 
+function makeLocalShuffledOptions(correctText: string, distractors: string[], seed: number) {
+  const allTexts = [correctText, ...distractors.slice(0, 3)];
+  const shuffled = [...allTexts].sort((a, b) => {
+    const hashA = Math.sin(seed + a.length * 13 + 7);
+    const hashB = Math.sin(seed + b.length * 17 + 11);
+    return hashA - hashB;
+  });
+
+  const labels: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
+  const opsi = labels.map((label, idx) => ({
+    label,
+    text: shuffled[idx] || `Pilihan ${label}`
+  }));
+
+  const correctIndex = shuffled.indexOf(correctText);
+  const kunciJawaban = labels[correctIndex >= 0 ? correctIndex : 0];
+
+  return { opsi, kunciJawaban };
+}
+
 export function generateLocalQuestionItem(
   kisi: KisiKisiItem,
   index: number,
-  identity: SchoolIdentity
+  identity: SchoolIdentity,
+  seed: number = Date.now()
 ): QuestionItem {
   const { jenjang, kelas, mataPelajaran } = identity;
   const materiLower = (kisi.materiAjar || '').toLowerCase();
@@ -120,6 +141,7 @@ export function generateLocalQuestionItem(
   const isPg = kisi.bentukSoal === 'Pilihan Ganda';
   const level = kisi.level;
   const nomor = kisi.nomorSoal || index + 1;
+  const vSeed = seed + nomor * 31;
 
   // --- MATEMATIKA ---
   if (mataPelajaran.toLowerCase().includes('matematika') || materiLower.includes('pecahan') || materiLower.includes('hitung') || materiLower.includes('bilangan')) {
